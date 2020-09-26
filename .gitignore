@@ -1,0 +1,47 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# ide
+.vscode
+.idea
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+.venv/
+
+#artifacts
+
+.gitattributes
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+.tox/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+Pipfile
+
+# tests
+#tests/
+
+# archives
+archives/
