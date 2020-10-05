@@ -1,7 +1,6 @@
 
 #%%
 
-#%%
 # Pytorch imports
 import torch
 from torch import nn
@@ -76,7 +75,6 @@ class Trainer(GanTrainer):
         super().__init__(discriminator=discriminator, generator=generator)
 
 
-#%%
 # Load in Data 
 train_dataloader = get_mnist_data(batch_size=16)
 
@@ -84,15 +82,17 @@ train_dataloader = get_mnist_data(batch_size=16)
 gan = Trainer(discriminator=Discriminator(), generator=Generator())
 
 # Pretrain Network
-gan.pretrain_discriminator(train_dataloader, n_batches=50, lr=0.002)
+gan.pretrain_discriminator(train_dataloader, n_batches=5, lr=0.002)
 
+
+#%%
 # Train Gan
-gan.train_gan(train_dataloader, n_batches=3000, show_images_every_n=50, D_vs_G_updateratio=2.0)
+gan.train_gan(train_dataloader, n_batches=1000, show_images_every_n=200, D_vs_G_updateratio=1, disc_lr=0.0002, gen_lr=0.0004)
 
 #%% Evaluation: Plot Loss History
 Utils.plot_history(gan.generator.loss_history, window_size=10)
 Utils.plot_history(gan.discriminator.loss_history, window_size=10)
 
+#%%
 
-
-train data_loader  
+gan.generator.evaluate_with_image_grid(100)

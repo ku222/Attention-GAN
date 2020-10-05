@@ -61,7 +61,12 @@ class Utils:
         try: (k,s,p) = max(valid_params, key=lambda x: (x[0], x[2], x[1]))
         except: raise Exception('Could not find valid parameters to produce output hw')
         return nn.Conv2d(in_channels, out_channels, kernel_size=k, stride=s, padding=p, bias=False)
-        
+    
+    @staticmethod
+    def conv1x1(in_channels: int, out_channels: int) -> nn.Conv2d:
+        '''Create 1x1 conv where in_hw==out_hw but we specify in & out channels'''
+        return nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=1, bias=False)
+    
     @staticmethod
     def outpicture_block(in_channels: int, out_channels: int, in_hw: int, out_hw: int) -> nn.Sequential:
         '''Block with conv layer and a Tanh activation'''
@@ -104,9 +109,9 @@ class Utils:
         i = 0
         numbers = history
         moving_averages = []
-        while i < len(numbers) - window_size + 1:
-            this_window = numbers[i : i + window_size]
-            window_average = sum(this_window) / window_size
+        while i < (len(numbers) - window_size + 1):
+            window = numbers[i : i + window_size]
+            window_average = sum(window) / window_size
             moving_averages.append(window_average)
             i += 1
         plt.plot(moving_averages)
