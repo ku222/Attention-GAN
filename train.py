@@ -1,5 +1,6 @@
 #%%
 import torch
+from torch.optim import Adam
 # Modules/networks
 from networks.generator import Generator
 from networks.discriminators import Disc64, Disc128, Disc256
@@ -11,35 +12,64 @@ from losses.gen_loss import GenLoss
 # Dataloaders
 from data.birds import BirdsDataset
 from data.preprocessor import DatasetPreprocessor
+# utilities
+from utilities.decorators import timer
 
-gf_dim = 32
-df_dim = 64
-emb_dim = 256
-z_dim = 100
-seq_len = 15
-batch_size = 8
+# Dimensions
+GF_DIM = 32
+DF_DIM = 64
+EMB_DIM = 256
+Z_DIM = 100
+SEQ_LEN = 15
+BATCH_SIZE = 16
+GEN_LR = 0.0002
+DISC_LR = 0.0002
 
-device = torch.device('cuda')
-noise = torch.randn((batch_size, z_dim)).to(device)
-sent_emb = torch.randn((batch_size, emb_dim)).to(device)
-word_embs = torch.randn((batch_size, emb_dim, seq_len)).to(device)
-mask = AttentionModule.create_random_mask(batch_size, seq_len).to(device)
+# Datasets
+DATASET = BirdsDataset(max_images=100)
+PREPROCESSOR = DatasetPreprocessor()
+DATALOADER = PREPROCESSOR.preprocess(dataset, maxlen=SEQ_LEN, batch_size=BATCH_SIZE)
 
+# Networks/Modules
+DEVICE = torch.device('cuda')
+GENERATOR = Generator(gf_dim=GF_DIM, emb_dim=EMB_DIM, z_dim=Z_DIM).to(DEVICE)
+DISCRIMINATORS = [Disc64(df_dim), Disc128(df_dim), Disc256(df_dim)]
+DISCRIMINATORS = [d.to(DEVICE) for d in discriminators]
+EMBEDDER = RNNEncoder(vocabsize=preproc.n_words)
 
-print(mask.shape)
-word_embs.shape
+# Training items
+GEN_OPTIM = Adam(GENERATOR.parameters(), lr=GEN_LR, betas=(0.5, 0.999))
+
+@timer
+def train_gan(epochs=1):
+    for _ in range(epochs):
+        for (words, masks, lengths, img64, img128, img256) in DATALOADER:
+            words = words.to(DEVICE)
+            masks = masks.to(DEVICE)
+            lengths = lengths.to(DEVICE)
+            img64 = img64.to(DEVICE)
+            img128 = img128.to(DEVICE)
+            img256 = img256.to(DEVICE)
+            # Embed words
+            hiddencell = EMBEDDER.init_hidden_cell_states(batch_size=BATCH_SIZE)
+            (word_embs, sent_embs) = EMBEDDER(words, lengths, hiddencell)
+            # Generate images
+            noise = torch.randn((BATCH_SIZE, Z_DIM))
+            # generate
+            fake_imgs, attn_maps = generator(noise=noise, sent_emb=sent_emb, word_embs=word_embs, mask=mask)
+            
 
 #%%
 
-generator = Generator(gf_dim=gf_dim, emb_dim=emb_dim, z_dim=z_dim)
-generator = generator.to(device)
+generator = 
+generator = generator.to(DEVICE)
 
-fake_imgs, attn_maps = generator(noise=noise, sent_emb=sent_emb, word_embs=word_embs, mask=mask)
+
 
 #%%
 
-discriminators = [Disc64(df_dim), Disc128(df_dim), Disc256(df_dim)]
-discriminators = [d.to(device) for d in discriminators]
+discriminators = 
+discriminators = 
 losses = []
 for (disc, fake_img) in zip(discriminators, fake_imgs):
     disc_loss = DiscLoss(device).get_loss(disc, fake_img, fake_img)
@@ -64,7 +94,8 @@ loader = preproc.preprocess(dataset)
 embedder = RNNEncoder(vocabsize=preproc.n_words)
 hiddencell = embedder.init_hidden_cell_states(batch_size=16)
 
-embedder.forward(words, )
+(word_embs, sent_embs) = embedder.forward(words, lengths, hiddencell)
 
 #%%
+
 

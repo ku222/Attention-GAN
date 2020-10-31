@@ -40,9 +40,9 @@ class Generator(nn.Module):
             word_embs:  (batch, emb_dim, seq_len)
             mask:       (batch, seq_len)
             
-        Returns a Tuple of Lists containing Tensors:
-            fake_imgs:  Tensors of fake images (batch, gf_dim, 64/128/256, 64/128/256)
-            attn_maps:  Tensors of attention maps (batch, seq_len, 64/128/256, 64/128/256)
+        Returns a Tuple of Lists each containing 3 Tensors:
+            fake_imgs:  3 tensors of fake images (batch, 3, 64/128/256, 64/128/256)
+            attn_maps:  3 tensors of attention maps (batch, seq_len, 64/128/256, 64/128/256)
         """
         fake_imgs, attn_maps = [], []
         # First stage
