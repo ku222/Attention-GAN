@@ -1,10 +1,16 @@
 #%%
 import torch
+# Modules/networks
 from networks.generator import Generator
 from networks.discriminators import Disc64, Disc128, Disc256
 from networks.attention import AttentionModule
+from networks.rnn_encoder import RNNEncoder
+# Losses
 from losses.disc_loss import DiscLoss
 from losses.gen_loss import GenLoss
+# Dataloaders
+from data.birds import BirdsDataset
+from data.preprocessor import DatasetPreprocessor
 
 gf_dim = 32
 df_dim = 64
@@ -40,3 +46,25 @@ for (disc, fake_img) in zip(discriminators, fake_imgs):
     losses.append(disc_loss)
     
 #%%
+
+
+
+dataset = BirdsDataset(max_images=100)
+
+#%%
+preproc = DatasetPreprocessor()
+loader = preproc.preprocess(dataset)
+
+#%%
+
+(words, masks, lengths, img64, img128, img256) = next(iter(loader))
+
+#%%
+
+embedder = RNNEncoder(vocabsize=preproc.n_words)
+hiddencell = embedder.init_hidden_cell_states(batch_size=16)
+
+embedder.forward(words, )
+
+#%%
+
