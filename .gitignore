@@ -15,8 +15,9 @@ __pycache__/
 .python-version
 .venv/
 
-# Embeddings
+# Embeddings and Training
 *.txt
+*.png
 
 #artifacts
 

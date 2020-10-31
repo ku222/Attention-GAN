@@ -89,7 +89,7 @@ class GanGenerator(nn.Module):
                 image = generated_images[counter]
                 image = image.permute(1, 2, 0)
                 axarr[i,j].axis('off')
-                axarr[i,j].imshow(image, cmap='gray_r')
+                axarr[i,j].imshow(image)
                 counter += 1
         # save plot to file
         timenow: str = str(datetime.now()).split('.')[0].replace(':', '-')

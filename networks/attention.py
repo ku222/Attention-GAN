@@ -18,7 +18,7 @@ class AttentionModule(nn.Module):
         self.nc_in = nc_in
         self.conv1 = Layers.conv1x1(in_planes=emb_dim, out_planes=nc_in)
         self.mask = None
-        
+
     def apply_mask(self, mask: Tensor) -> None:
         self.mask = mask
 

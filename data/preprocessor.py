@@ -16,6 +16,22 @@ class DatasetPreprocessor:
         self.n_words = 2  # Count PAD, UNK
         self.vocab_built = False
 
+    def preprocess_user(self, captions: List[str], maxlen=15, batch_size=8) -> DataLoader:
+        """Preprocess user inputs - returns 2-tensor Dataloader of (tokens, lengths)"""
+        # Split on spaces and commas
+        all_tokens = [cap.replace(', ', ' , ').split() for cap in captions]
+        all_lengths = [len(tokens) for tokens in all_tokens]
+        # add padding up to maxlen
+        all_tokens = [tokens + ['[PAD]']*(maxlen - len(tokens)) for tokens in all_tokens]
+        # Word -> Index, and Word -> Mask
+        all_indices = [self._make_indices(tokens=tokens) for tokens in all_tokens]
+        # Make into TensorDataset
+        t_dataset = TensorDataset(
+            torch.LongTensor(all_indices),
+            torch.LongTensor(all_lengths)
+        )
+        return DataLoader(dataset=t_dataset, batch_size=batch_size)
+
     @timer
     def preprocess(self, dataset: BirdsDataset, maxlen=15, batch_size=16) -> DataLoader:
         """Convert caption strings to embedding indices, and makes mask"""
@@ -25,15 +41,13 @@ class DatasetPreprocessor:
         # Split on spaces and commas
         all_tokens = [img.caption.replace(', ', ' , ').split() for img in dataset.images]
         all_lengths = [len(tokens) for tokens in all_tokens]
-        # Add padding up to maxlen
+        # add padding up to maxlen
         all_tokens = [tokens + ['[PAD]']*(maxlen - len(tokens)) for tokens in all_tokens]
         # Word -> Index, and Word -> Mask
         all_indices = [self._make_indices(tokens=tokens) for tokens in all_tokens]
-        all_masks = [self._make_mask(tokens=tokens) for tokens in all_tokens]
         # Make into TensorDataset
         t_dataset = TensorDataset(
             torch.LongTensor(all_indices),
-            torch.LongTensor(all_masks),
             torch.LongTensor(all_lengths),
             torch.stack(dataset.all_img64),
             torch.stack(dataset.all_img128),
@@ -41,10 +55,6 @@ class DatasetPreprocessor:
         )
         return DataLoader(dataset=t_dataset, batch_size=batch_size)
 
-    def _make_mask(self, tokens: List[str]) -> List[str]:
-        mask = [0 if t=='[PAD]' else 1 for t in tokens]
-        return mask
-    
     def _make_indices(self, tokens: List[str]) -> List[str]:
         indices = []
         for word in tokens:

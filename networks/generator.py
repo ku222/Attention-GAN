@@ -27,11 +27,10 @@ class Generator(nn.Module):
         # Second stage
         self.gen2 = GenNextStage(gf_dim=gf_dim, emb_dim=emb_dim, num_residual_blocks=2)
         self.img_out2 = GenMakeImage(gf_dim=gf_dim)
-        # Final stage
+        # Third stage
         self.gen3 = GenNextStage(gf_dim=gf_dim, emb_dim=emb_dim, num_residual_blocks=2)
         self.img_out3 = GenMakeImage(gf_dim=gf_dim)
 
-    @timer
     def forward(self, noise: Tensor, sent_emb: Tensor, word_embs: Tensor, mask: Tensor) -> Tuple[List[Tensor], List[Tensor]]:
         """
         Params:
