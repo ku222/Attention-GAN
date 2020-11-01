@@ -23,6 +23,10 @@ class BirdImage:
         self.imgtensors = self._make_images()
         self.caption = caption
 
+    @property
+    def class_id(self) -> int:
+        return int(self.imgpath[:3])
+
     def _make_images(self) -> List[Tensor]:
         imgtensors = []
         img = Image.open(f"{self.root_dir}/{self.imgpath}")
@@ -34,7 +38,7 @@ class BirdImage:
             tensor = pipeline(img)
             imgtensors.append(tensor)
         return imgtensors
-    
+
     def view_image(self, idx=2) -> None:
         assert idx in [0, 1, 2]
         imgtensor = self.imgtensors[idx]
@@ -78,6 +82,10 @@ class BirdsDataset:
         # Make images
         self._images_dir = Config.BIRDS_IMAGES
         self.images = self._load_images(max_images)
+    
+    @property
+    def all_class_ids(self) -> List[int]:
+        return [img.class_id for img in self.images]
     
     @property
     def all_img64(self) -> List[Tensor]:

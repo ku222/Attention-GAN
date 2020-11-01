@@ -9,14 +9,16 @@ import matplotlib.pyplot as plt
 import torch
 from torch.optim import Adam
 from torch import Tensor
+from torch.autograd import Variable
 # Modules/networks
 from networks.generator import Generator
 from networks.discriminators import Disc64, Disc128, Disc256
-from networks.attention import AttentionModule
+from networks.attention import AttentionModule, func_attention
 from networks.rnn_encoder import RNNEncoder
 # Losses
 from losses.disc_loss import DiscLoss
 from losses.gen_loss import GenLoss
+from losses.words_loss import WordsLoss
 # Dataloaders
 from data.birds import BirdsDataset
 from data.preprocessor import DatasetPreprocessor
@@ -51,7 +53,6 @@ for d in DISCRIMINATORS:
     d.to(DEVICE)
 EMBEDDER = RNNEncoder(vocabsize=PREPROCESSOR.n_words, nhidden=EMB_DIM)
 EMBEDDER.to(DEVICE)
-
 # Training items
 GEN_OPTIM = Adam(GENERATOR.parameters(), lr=GEN_LR, betas=(0.5, 0.999))
 DISC_OPTIMS = [Adam(disc.parameters(), lr=DISC_LR, betas=(0.5, 0.999))
@@ -62,9 +63,12 @@ DISC_OPTIMS = [Adam(disc.parameters(), lr=DISC_LR, betas=(0.5, 0.999))
 
 class GanTrainer:
     def __init__(self):
+        self._reset_logs()
+
+    def _reset_logs(self) -> None:
         self.disclogs = defaultdict(list)
         self.genlogs = []
-        
+
     def _latest_loss(self) -> str:
         g = f"g: {self.genlogs[-1]}"
         d64 = f"d64: {self.disclogs[0][-1]}"
@@ -72,13 +76,19 @@ class GanTrainer:
         d256 = f"d256: {self.disclogs[2][-1]}"
         losses = [g, d64, d128, d256]
         return ' | '.join(losses)
-    
+
     def _make_mask(self, lengths: Tensor) -> Tensor:
         maxlen = max(lengths)
         masks = [[1]*leng + [0]*(maxlen-leng)
                  for leng in lengths]
         return torch.LongTensor(masks)
-        
+
+    def _make_match_labels(self, batch_size: int) -> Variable:
+        return Variable(torch.LongTensor(range(batch_size)))
+    
+    def _make_noise(self, batch_size: int, z_dim: int) -> Variable:
+        return Variable(torch.FloatTensor(batch_size, z_dim))
+
     def _evaluate_with_img_grid(self, fake_images: List[Tensor], epoch: int=None, batch: int=None, folder='generated_images') -> None:
         '''Produces an [n_images, n_images] image grid for evaluation purposes, saves to an image folder'''
         # Find largest square number
@@ -121,41 +131,54 @@ class GanTrainer:
 
     @timer
     def train_gan(self, epochs=50, evaluate_every=50):
+        match_labels = self._make_match_labels(BATCH_SIZE).to(DEVICE)
+        noise = self._make_noise(BATCH_SIZE, Z_DIM).to(DEVICE)
         for e in range(epochs):
             for (b, batch) in enumerate(DATALOADER):
                 batch = [t.to(DEVICE) for t in batch]
-                (words, lengths, img64, img128, img256) = batch
-                if min(lengths) < 2 or len(words) < 2:
+                (words, lengths, class_ids, img64, img128, img256) = batch
+                if min(lengths) < 2 or len(words) < BATCH_SIZE:
                     continue
                 masks = self._make_mask(lengths).to(DEVICE)
                 # Embed words
                 hiddencell = EMBEDDER.init_hidden_cell_states(batch_size=BATCH_SIZE)
                 (word_embs, sent_embs) = EMBEDDER(words, lengths, hiddencell)
-                # Make noise, concatenate with sentence embedding
-                noise = torch.randn((len(words), Z_DIM)).to(DEVICE)
                 # Make images
                 fake_imgs, attn_maps = GENERATOR(noise=noise, sent_emb=sent_embs, word_embs=word_embs, mask=masks)
                 real_imgs = [img64, img128, img256]
-                # Get discriminator loss
+                #################### Get discriminator loss
                 for (i, (disc, optim, fake_img, real_img)) in enumerate(zip(DISCRIMINATORS, DISC_OPTIMS, fake_imgs, real_imgs)):
                     optim.zero_grad()
                     loss = DiscLoss(DEVICE).get_loss(disc, fake_img, real_img)
                     loss.backward(retain_graph=True)
                     optim.step()
                     self.disclogs[i].append(loss.item())
-                # Get generator loss
+                #################### Get generator loss
                 GEN_OPTIM.zero_grad()
                 total_genloss = 0
-                for (disc, fake_img) in zip(DISCRIMINATORS, fake_imgs):
+                for (i, (disc, fake_img)) in enumerate(zip(DISCRIMINATORS, fake_imgs)):
                     loss = GenLoss(DEVICE).get_loss(disc, fake_img)
                     total_genloss += loss
+                    #################### DAMSM loss if final resolution
+                    if i == 2:
+                        (wloss, _) = WordsLoss(DEVICE).get_loss(fake_img, word_embs, match_labels, lengths, class_ids)
+                        total_genloss += wloss
                 total_genloss.backward()
                 GEN_OPTIM.step()
                 self.genlogs.append(total_genloss.item())
-                # Log stats
+                #################### Log stats
                 print(f"\t {self._latest_loss()}")
                 if (b+1) % evaluate_every == 0:
                     self._evaluate_with_img_grid(fake_imgs, epoch={e+1}, batch=b+1)
+                    self._reset_logs()
+                    
+    @timer
+    def pretrain_damsm(self, epochs=10):
+        match_labels = self._make_match_labels(BATCH_SIZE).to(DEVICE)
+        for e in range(epochs):
+            for (b, batch) in enumerate(DATALOADER):
+                batch = [t.to(DEVICE) for t in batch]
+                (words, lengths, class_ids, img64, img128, img256) = batch
 
 
 trainer = GanTrainer()
@@ -199,3 +222,11 @@ for batch in user_dataset:
 #%%
 img = fake_imgs[2][0].detach().cpu()
 plt.imshow(img.permute(1, 2, 0))
+
+
+#%%
+from torch.autograd import Variable
+import torch
+Variable(torch.LongTensor(range(8)))
+
+int('055')

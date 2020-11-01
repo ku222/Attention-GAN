@@ -12,12 +12,7 @@ class GenLoss:
 
     def make_labels_for_real_imgs(self, num_labels: int) -> Tensor:
         """Creates labels for real images"""
-        labels = torch.FloatTensor(num_labels).uniform_(0.9, 0.9)
-        return labels.to(self.device)
-
-    def make_labels_for_fake_imgs(self, num_labels: int) -> Tensor:
-        """Creates labels for fake images"""
-        labels = torch.FloatTensor(num_labels).uniform_(0.1, 0.1)
+        labels = torch.FloatTensor(num_labels).uniform_(1.0, 1.0)
         return labels.to(self.device)
 
     def get_loss(self, discriminator: Module, fake_images: Tensor) -> Tensor:

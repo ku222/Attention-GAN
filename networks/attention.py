@@ -77,14 +77,44 @@ class AttentionModule(nn.Module):
             weighted_words.view(batch, nc_in, h, w),
             attn.view(batch, seq_len, h, w)
         )
+        
+        
+def func_attention(query, context, gamma1=4.0, scaled=True):
+    """
+    query: batch x ndf x queryL
+    context: batch x ndf x ih x iw (sourceL=ihxiw)
+    """
+    (batch_size, ndf, queryL) = query.shape
+    ih, iw = context.size(2), context.size(3)
+    sourceL = ih * iw
 
-    @staticmethod
-    def create_random_mask(batch_size=8, seq_len=15) -> Tensor:
-        '''Creates random mask for testing purposes'''
-        tensors = [
-            torch.LongTensor(
-                sorted([1 for _ in range(random.randint(1, seq_len))], reverse=True)
-            )
-            for i in range(batch_size)
-        ]
-        return pad_sequence(tensors, batch_first=True, padding_value=0)
+    # --> batch x sourceL x ndf
+    context = context.view(batch_size, -1, sourceL)
+    contextT = torch.transpose(context, 1, 2).contiguous()
+
+    # Get attention
+    # (batch x sourceL x ndf)(batch x ndf x queryL)
+    # -->batch x sourceL x queryL
+    attn = torch.bmm(contextT, query) # Eq. (7) in AttnGAN paper
+    # Scale attention if required
+    attn = attn * (1 / sqrt(ndf)) if scaled else attn
+    # Reshape to a long matrix to make softmax op. easier
+    attn = attn.view(batch_size*sourceL, queryL) # --> batch*sourceL x queryL
+    attn = nn.Softmax()(attn)  # Eq. (8)
+    # --> batch x sourceL x queryL
+    attn = attn.view(batch_size, sourceL, queryL)
+    # --> batch*queryL x sourceL
+    attn = torch.transpose(attn, 1, 2).contiguous()
+    attn = attn.view(batch_size*queryL, sourceL)
+    #  Eq. (9)
+    attn = attn * gamma1
+    attn = nn.Softmax()(attn)
+    attn = attn.view(batch_size, queryL, sourceL)
+    # --> batch x sourceL x queryL
+    attnT = torch.transpose(attn, 1, 2).contiguous()
+
+    # (batch x ndf x sourceL)(batch x sourceL x queryL)
+    # --> batch x ndf x queryL
+    weightedContext = torch.bmm(context, attnT)
+
+    return weightedContext, attn.view(batch_size, -1, ih, iw)

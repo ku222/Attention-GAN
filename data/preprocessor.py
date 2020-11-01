@@ -49,6 +49,7 @@ class DatasetPreprocessor:
         t_dataset = TensorDataset(
             torch.LongTensor(all_indices),
             torch.LongTensor(all_lengths),
+            torch.LongTensor(dataset.all_class_ids),
             torch.stack(dataset.all_img64),
             torch.stack(dataset.all_img128),
             torch.stack(dataset.all_img256),

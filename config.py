@@ -1,4 +1,4 @@
-
+#%%
 
 class Config:
     BIRDS_IMAGES = r'D:\GAN\birdsDataset\images'

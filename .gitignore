@@ -18,6 +18,7 @@ __pycache__/
 # Embeddings and Training
 *.txt
 *.png
+*.pkl
 
 #artifacts
 
