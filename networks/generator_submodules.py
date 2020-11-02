@@ -4,6 +4,7 @@ from typing import Tuple
 import torch
 from torch import nn
 from torch import Tensor
+from torch.autograd import Variable
 
 from utilities.layers import Layers
 from .attention import AttentionModule
@@ -17,23 +18,23 @@ class GenInitialStage(nn.Module):
         - Pass through Linear layer and reshape
         - Upsample 4 times to a 64x64 image
     """
-    def __init__(self, gf_dim: int, z_dim: int, emb_dim: int):
+    def __init__(self, gf_dim: int, z_dim: int, cond_dim: int):
         """
         Params:
             gf_dim: base number of generator features
             z_dim: noise vector dimensions
-            emb_dim: caption word embedding dimensions
+            cond_dim: VAE embedding dimensions
         """
         super().__init__()
         self.gf_dim = gf_dim
         self.z_dim = z_dim
-        self.emb_dim = emb_dim
+        self.cond_dim = cond_dim
         self.define_module()
 
     def define_module(self):
-        ng, nz, ne = self.gf_dim, self.z_dim, self.emb_dim
+        ng, nz, nc = self.gf_dim, self.z_dim, self.cond_dim
         self.fc = nn.Sequential(
-            nn.Linear(in_features=nz+ne, out_features=ng*4*4*2, bias=False),
+            nn.Linear(in_features=nz+nc, out_features=ng*4*4*2, bias=False),
             nn.BatchNorm1d(num_features=ng*4*4*2),
             Layers.GLU()
             )
@@ -43,19 +44,19 @@ class GenInitialStage(nn.Module):
         self.upsample3 = Layers.upBlock(ng//4, ng//8)
         self.upsample4 = Layers.upBlock(ng//8, ng//16)
 
-    def forward(self, noise: Tensor, sentence: Tensor) -> Tensor:
+    def forward(self, noise: Tensor, condition: Tensor) -> Tensor:
         """
         Parameters:
             noise:      (batch_size, noise_dim)
-            sentence:   (batch_size, embedding_dim)
+            condition:   (batch_size, cond_dim)
 
         Returns:
             Tensor:     (batch_size, gf_dim/16, 64, 64)
         """
         # Concatenate noise and global sentence vectors
-        noise_sentence = torch.cat((noise, sentence), 1)
+        noise_condition = torch.cat((noise, condition), 1)
         # Pass through linear and reshape
-        X = self.fc(noise_sentence)
+        X = self.fc(noise_condition)
         X = X.view(-1, self.gf_dim, 4, 4)       # (batch, gf_dim, 4, 4)
         # Upsample
         X = self.upsample1(X)                   # (batch, gf_dim, 8, 8)
@@ -139,22 +140,22 @@ class GenMakeImage(nn.Module):
     def forward(self, images: Tensor) -> Tensor:
         X = self.img(images)
         return X
-    
-    
+
+
 class VarAutoEncoder(nn.Module):
     # some code is modified from vae examples
     # (https://github.com/pytorch/examples/blob/master/vae/main.py)
-    def __init__(self):
+    def __init__(self, emb_dim: int, cond_dim=100):
         super().__init__()
-        self.t_dim = cfg.TEXT.EMBEDDING_DIM
-        self.c_dim = cfg.GAN.CONDITION_DIM
-        self.fc = nn.Linear(self.t_dim, self.c_dim * 4, bias=True)
-        self.relu = GLU()
+        self.emb_dim = emb_dim
+        self.cond_dim = cond_dim
+        self.fc = nn.Linear(emb_dim, cond_dim * 4, bias=True)
+        self.relu = Layers.GLU()
 
     def encode(self, text_embedding):
         x = self.relu(self.fc(text_embedding))
-        mu = x[:, :self.c_dim]
-        logvar = x[:, self.c_dim:]
+        mu = x[:, :self.cond_dim]
+        logvar = x[:, self.cond_dim:]
         return mu, logvar
 
     def reparametrize(self, mu, logvar):
@@ -163,7 +164,7 @@ class VarAutoEncoder(nn.Module):
         eps = Variable(eps)
         return eps.mul(std).add_(mu)
 
-    def forward(self, text_embedding):
+    def forward(self, text_embedding: Tensor):
         mu, logvar = self.encode(text_embedding)
         c_code = self.reparametrize(mu, logvar)
         return c_code, mu, logvar

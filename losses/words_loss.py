@@ -94,8 +94,6 @@ class WordsLoss:
         if class_ids is not None:
             similarities.data.masked_fill_(masks, -float('inf'))
         similarities1 = similarities.transpose(0, 1)
-        print(similarities)
-        print(labels)
         # Final losses
         loss0 = nn.CrossEntropyLoss()(similarities, labels)
         loss1 = nn.CrossEntropyLoss()(similarities1, labels)

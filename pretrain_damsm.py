@@ -9,8 +9,10 @@ import matplotlib.pyplot as plt
 import torch
 from torch.optim import Adam
 from torch import Tensor
+from torch.nn import Module
 from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm_
+from tqdm import tqdm
 # Modules/networks
 from networks.attention import AttentionModule, func_attention
 from networks.rnn_encoder import RNNEncoder
@@ -19,12 +21,15 @@ from networks.cnn_encoder import CNNEncoder
 from losses.disc_loss import DiscLoss
 from losses.gen_loss import GenLoss
 from losses.words_loss import WordsLoss
+from losses.sentence_loss import SentenceLoss
 # Dataloaders
 from data.birds import BirdsDataset
 from data.preprocessor import DatasetPreprocessor
 # utilities
 from utilities.decorators import timer
 from utilities.training import Training
+# Trainers
+from trainers.trainer import ModelTrainer
 
 # Dimensions
 GF_DIM = 32
@@ -32,14 +37,14 @@ DF_DIM = 64
 EMB_DIM = 256
 Z_DIM = 100
 SEQ_LEN = 15
-BATCH_SIZE = 4
+BATCH_SIZE = 64
 LR = 0.002
 RNN_GRAD_CLIP = 0.25
 
 
 #%%
 # Datasets
-DATASET = BirdsDataset(max_images=100)
+DATASET = BirdsDataset(max_images=9999)
 PREPROCESSOR = DatasetPreprocessor()
 DATALOADER = PREPROCESSOR.preprocess(DATASET, maxlen=SEQ_LEN, batch_size=BATCH_SIZE)
 
@@ -58,35 +63,18 @@ OPTIMIZER = Adam(params, lr=LR, betas=(0.5, 0.999))
 
 #%%
 
-class DAMSMTrainer:
+class DAMSMTrainer(ModelTrainer):
     def __init__(self):
-        self.losses = []
+        super().__init__()
+        self.loss_history = []
+        self.modules = [RNN, CNN]
 
-    def _latest_loss(self) -> str:
-        g = f"g: {self.genlogs[-1]}"
-        d64 = f"d64: {self.disclogs[0][-1]}"
-        d128 = f"d128: {self.disclogs[1][-1]}"
-        d256 = f"d256: {self.disclogs[2][-1]}"
-        losses = [g, d64, d128, d256]
-        return ' | '.join(losses)
-
-    def _make_mask(self, lengths: Tensor) -> Tensor:
-        maxlen = max(lengths)
-        masks = [[1]*leng + [0]*(maxlen-leng)
-                 for leng in lengths]
-        return torch.LongTensor(masks)
-
-    def _make_match_labels(self, batch_size: int) -> Variable:
-        return Variable(torch.LongTensor(range(batch_size)))
-    
-    def _make_noise(self, batch_size: int, z_dim: int) -> Variable:
-        return Variable(torch.FloatTensor(batch_size, z_dim))
-                    
     @timer
-    def pretrain_damsm(self, epochs=1):
+    def pretrain_damsm(self, epochs=30, snapshot_weights_every=100, plot_loss_every=1):
         match_labels = self._make_match_labels(BATCH_SIZE).to(DEVICE)
         for e in range(epochs):
-            for (b, batch) in enumerate(DATALOADER):
+            print('='*10 + f" Epoch {e+1} " + '='*10)
+            for (b, batch) in tqdm(enumerate(DATALOADER)):
                 batch = [t.to(DEVICE) for t in batch]
                 (captions, lengths, class_ids, img64, img128, img256) = batch
                 if min(lengths) < 2 or len(captions) < BATCH_SIZE:
@@ -100,62 +88,24 @@ class DAMSMTrainer:
                 (word_embs, sent_embs) = RNN(captions, lengths, hiddencell)
                 # words Loss
                 OPTIMIZER.zero_grad()
-                (loss, attn) = WordsLoss(DEVICE).get_loss(words_features, word_embs, match_labels, lengths, class_ids)
-                print('\t', len(attn), attn[0].shape)
+                (wloss, attn) = WordsLoss(DEVICE).get_loss(words_features, word_embs, match_labels, lengths, class_ids)
+                sloss = SentenceLoss(DEVICE).get_loss(sent_code, sent_embs, match_labels, class_ids)
+                loss = (wloss + sloss)
                 loss.backward()
                 clip_grad_norm_(RNN.parameters(), RNN_GRAD_CLIP)
                 OPTIMIZER.step()
-                # Log stats
-                print(f"Loss = {loss.item()}")
-                self.losses.append(loss.item())
-                break
+                self.loss_history.append(round(loss.item(), 3))
                 
+            # Snapshots
+            if (e+1) % snapshot_weights_every == 0:
+                self._save_weights(self.modules)
+            if (e+1) % plot_loss_every == 0:
+                self._plot_loss_history(self.loss_history, epoch=e+1)
+                
+
 trainer = DAMSMTrainer()
+
 
 #%%
 ## 44 seconds for 1000 images
-trainer.pretrain_damsm(1)
-
-#%%
-from torch.utils.data import DataLoader
-
-a = torch.randn(16, 8)
-b = torch.randn(4, 8)
-len(a)
-#%%
-import math
-num_images = 13
-
-
-#%%
-
-Training.plot_history(trainer.losses)
-
-#%%
-
-captions=['all-purpose bill, red crown, blue chest']*16
-
-user_dataset = PREPROCESSOR.preprocess_user(captions, batch_size=8)
-for batch in user_dataset:
-    batch = [t.to(DEVICE) for t in batch]
-    (words, lengths) = batch
-    masks = trainer._make_mask(lengths).to(DEVICE)
-    # Embed words
-    hiddencell = EMBEDDER.init_hidden_cell_states(batch_size=BATCH_SIZE)
-    (word_embs, sent_embs) = EMBEDDER(words, lengths, hiddencell)
-    # Make noise, concatenate with sentence embedding
-    noise = torch.randn((len(words), Z_DIM)).to(DEVICE)
-    # Make images
-    (fake_imgs, attn_maps) = GENERATOR(noise=noise, sent_emb=sent_embs, word_embs=word_embs, mask=masks)
-
-#%%
-img = fake_imgs[2][0].detach().cpu()
-plt.imshow(img.permute(1, 2, 0))
-
-
-#%%
-from torch.autograd import Variable
-import torch
-Variable(torch.LongTensor(range(8)))
-
-int('055')
+trainer._plot_loss_history(trainer.loss_history, epoch=31)

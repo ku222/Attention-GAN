@@ -30,6 +30,10 @@ class CNNEncoder(nn.Module):
             param.requires_grad = False
         return model
 
+    def freeze_all_weights(self):
+        for param in self.parameters():
+            param.requires_grad = False
+
     def __define_module(self, model) -> None:
         """Steal layers from Inception_v3"""
         self.Conv2d_1a_3x3 = model.Conv2d_1a_3x3

@@ -5,12 +5,12 @@ import torch
 from torch import nn
 from torch import Tensor
 
-from .generator_submodules import GenInitialStage, GenNextStage, GenMakeImage
+from .generator_submodules import GenInitialStage, GenNextStage, GenMakeImage, VarAutoEncoder
 from utilities.decorators import timer
 
 
 class Generator(nn.Module):
-    def __init__(self, gf_dim: int, emb_dim: int, z_dim: int):
+    def __init__(self, gf_dim: int, emb_dim: int, z_dim: int, cond_dim: int):
         """
         Params:
             gf_dim: base number of generator features
@@ -21,8 +21,11 @@ class Generator(nn.Module):
         self.gf_dim = gf_dim
         self.emb_dim = emb_dim
         self.z_dim = z_dim
+        self.cond_dim = cond_dim
+        # VAE
+        self.vae = VarAutoEncoder(emb_dim=emb_dim, cond_dim=cond_dim)
         # First stage
-        self.gen1 = GenInitialStage(gf_dim=gf_dim*16, z_dim=z_dim, emb_dim=emb_dim)
+        self.gen1 = GenInitialStage(gf_dim=gf_dim*16, z_dim=z_dim, cond_dim=cond_dim)
         self.img_out1 = GenMakeImage(gf_dim=gf_dim)
         # Second stage
         self.gen2 = GenNextStage(gf_dim=gf_dim, emb_dim=emb_dim, num_residual_blocks=2)
@@ -44,8 +47,9 @@ class Generator(nn.Module):
             attn_maps:  3 tensors of attention maps (batch, seq_len, 64/128/256, 64/128/256)
         """
         fake_imgs, attn_maps = [], []
+        (condition, mu, logvar) = self.vae(sent_emb)
         # First stage
-        images = self.gen1(noise, sent_emb)
+        images = self.gen1(noise, condition)
         fake_img = self.img_out1.forward(images)
         fake_imgs.append(fake_img)
         # Second stage
@@ -59,6 +63,5 @@ class Generator(nn.Module):
         fake_imgs.append(fake_img)
         attn_maps.append(attn)
         # Return tuple
-        return (fake_imgs, attn_maps)
-    
+        return (fake_imgs, attn_maps, mu, logvar)
 

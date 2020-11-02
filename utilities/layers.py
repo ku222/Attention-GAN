@@ -12,7 +12,7 @@ class Layers:
     """
     @staticmethod
     def GLU() -> "Layers.GLU":
-        """Instantiates Gated Linear Unit"""
+        """Instantiates Gated Linear Unit; shrinks filter dims by 2"""
         class GLU(nn.Module):
             def __init__(self):
                 super(GLU, self).__init__()

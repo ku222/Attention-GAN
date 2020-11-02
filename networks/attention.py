@@ -81,6 +81,7 @@ class AttentionModule(nn.Module):
         
 def func_attention(query, context, gamma1=4.0, scaled=True):
     """
+    Functional version of attention - contains no learnable params
     query: batch x ndf x queryL
     context: batch x ndf x ih x iw (sourceL=ihxiw)
     """

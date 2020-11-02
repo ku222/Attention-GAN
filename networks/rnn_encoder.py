@@ -60,6 +60,10 @@ class RNNEncoder(nn.Module):
             Variable(weight.new(self.nlayers * self.ndirections, batch_size, self.nhidden).zero_()),
             Variable(weight.new(self.nlayers * self.ndirections, batch_size, self.nhidden).zero_())
             )
+    
+    def freeze_all_weights(self):
+        for param in self.parameters():
+            param.requires_grad = False
 
     def forward(self, captions: Tensor, caption_lengths: Tensor, hiddencell: Tuple[Tensor]) -> Tuple[Tensor, Tensor]:
         """
