@@ -24,9 +24,9 @@ class ModelTrainer:
 
     def _make_noise(self, batch_size: int, z_dim: int) -> Tensor:
         """Produces a 2-D Noise matrix with shape [batch_size, z_dim]"""
-        return torch.FloatTensor(batch_size, z_dim)
+        return torch.FloatTensor(batch_size, z_dim).normal_(mean=0, std=1)
 
-    def _plot_loss_history(self, history: List[float], epoch: int = None, window_size=100, folder='generated_images') -> None:
+    def _plot_history(self, history: List[float], epoch: int = None, window_size=100, name='loss_hist', folder='generated_images') -> None:
         """
         Plot a list of float values - save it to a folder for display
         """
@@ -39,7 +39,7 @@ class ModelTrainer:
             moving_averages.append(window_average)
             i += 1
         plt.plot(moving_averages)
-        plt.savefig(f"{folder}/epoch_{epoch}-loss_history")
+        plt.savefig(f"{folder}/epoch_{epoch}-{name}")
         plt.close()
 
     def _plot_image_grid(self, fake_images: List[Tensor], epoch: int=None, folder='generated_images') -> None:

@@ -16,21 +16,11 @@ class DatasetPreprocessor:
         self.n_words = 2  # Count PAD, UNK
         self.vocab_built = False
 
-    def preprocess_user(self, captions: List[str], maxlen=15, batch_size=8) -> DataLoader:
-        """Preprocess user inputs - returns 2-tensor Dataloader of (tokens, lengths)"""
-        # Split on spaces and commas
-        all_tokens = [cap.replace(', ', ' , ').split() for cap in captions]
-        all_lengths = [len(tokens) for tokens in all_tokens]
-        # add padding up to maxlen
-        all_tokens = [tokens + ['[PAD]']*(maxlen - len(tokens)) for tokens in all_tokens]
-        # Word -> Index, and Word -> Mask
-        all_indices = [self._make_indices(tokens=tokens) for tokens in all_tokens]
-        # Make into TensorDataset
-        t_dataset = TensorDataset(
-            torch.LongTensor(all_indices),
-            torch.LongTensor(all_lengths)
-        )
-        return DataLoader(dataset=t_dataset, batch_size=batch_size)
+    def preprocess_user(self, images: List[BirdImage]) -> DataLoader:
+        """Preprocess user inputs"""
+        dataset = BirdsDataset(init_empty=True)
+        dataset.images = images
+        return self.preprocess(dataset, batch_size=len(images))
 
     @timer
     def preprocess(self, dataset: BirdsDataset, maxlen=15, batch_size=16) -> DataLoader:
@@ -40,6 +30,7 @@ class DatasetPreprocessor:
             self._buildVocab(dataset)
         # Split on spaces and commas
         all_tokens = [img.caption.replace(', ', ' , ').split() for img in dataset.images]
+        # Get lengths
         all_lengths = [len(tokens) for tokens in all_tokens]
         # add padding up to maxlen
         all_tokens = [tokens + ['[PAD]']*(maxlen - len(tokens)) for tokens in all_tokens]
@@ -47,6 +38,7 @@ class DatasetPreprocessor:
         all_indices = [self._make_indices(tokens=tokens) for tokens in all_tokens]
         # Make into TensorDataset
         t_dataset = TensorDataset(
+            torch.LongTensor(dataset.all_image_ids),
             torch.LongTensor(all_indices),
             torch.LongTensor(all_lengths),
             torch.LongTensor(dataset.all_class_ids),

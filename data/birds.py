@@ -7,11 +7,12 @@ from collections import defaultdict, Counter
 from typing import List, Dict
 from utilities.decorators import timer
 
-from matplotlib.pyplot import imshow
+from matplotlib.pyplot import imshow, get_cmap
 from PIL import Image
 import torch
 from torchvision.transforms import Compose, ToTensor, Resize, Normalize
 from torch import Tensor
+from torch.nn import Upsample
 
 from config import Config
 
@@ -22,6 +23,11 @@ class BirdImage:
         self.imgpath = imgpath
         self.imgtensors = self._make_images()
         self.caption = caption
+        self.attnmap = None
+
+    @property
+    def tokens(self) -> List[int]:
+        return self.caption.replace(', ', ' , ').split()
 
     @property
     def class_id(self) -> int:
@@ -44,6 +50,29 @@ class BirdImage:
         imgtensor = self.imgtensors[idx]
         imshow(imgtensor.permute(1,2,0))
         print(self.caption)
+
+    def view_attention_maps(self, idx=0) -> None:
+        upsampler = Upsample(size=(256, 256), mode='nearest')
+        attnmap = upsampler(self.attnmap).squeeze(0) # (cap_len, 256, 256)
+        ##
+        view_
+        ##
+        tokens = self.tokens
+        (f, axarr) = plt.subplots(len(tokens), len(attnmap))
+        counter = 0
+        for i in range(len(tokens)):
+            for j in range(len(attnmap)):
+                # define subplot
+                image = images[counter]
+                image = image.permute(1, 2, 0)
+                axarr[i,j].axis('off')
+                axarr[i,j].imshow(image)
+                counter += 1
+            # save plot to file
+            timenow: str = str(datetime.now()).split('.')[0].replace(':', '-')
+            fname = f'{folder}/epoch_{epoch}-{res}x{res}.png' if epoch else f'{folder}/_{res}x{res}-{timenow}.png'
+            plt.savefig(fname)
+        return imshow(attn[idx], cmap=get_cmap('gray'))
 
 
 class CaptionCollection:
@@ -74,15 +103,21 @@ class CaptionCollection:
 
 
 class BirdsDataset:
-    def __init__(self, max_images=9999):
+    def __init__(self, max_images=9999, init_empty=False):
         # Make captions
-        self._captions_dir = Config.BIRDS_CAPTIONS
-        self.img2cap = self._load_captions()
-        self._make_best_captions()
-        # Make images
-        self._images_dir = Config.BIRDS_IMAGES
-        self.images = self._load_images(max_images)
+        if not init_empty:
+            self._captions_dir = Config.BIRDS_CAPTIONS
+            self.img2cap = self._load_captions()
+            self._make_best_captions()
+            # Make images
+            self._images_dir = Config.BIRDS_IMAGES
+            self.images = self._load_images(max_images)
+            self.id2image = self._id_to_birdImage()
     
+    @property
+    def all_image_ids(self) -> List[int]:
+        return list(range(len(self.images)))
+
     @property
     def all_class_ids(self) -> List[int]:
         return [img.class_id for img in self.images]
@@ -135,6 +170,12 @@ class BirdsDataset:
                         img2cap[imgpath] = capcollection
                     capcollection.add_caption(adjective, attribute)
         return img2cap
+
+    def _id_to_birdImage(self) -> Dict[int, BirdImage]:
+        mapping = dict()
+        for (i, birdImage) in enumerate(self.images):
+            mapping[i] = birdImage
+        return mapping
 
     def _load_attributes(self) -> Dict[str, tuple]:
         attributes = dict()

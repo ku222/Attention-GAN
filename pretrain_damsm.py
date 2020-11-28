@@ -12,6 +12,7 @@ from torch import Tensor
 from torch.nn import Module
 from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm_
+from torch.nn import Upsample
 from tqdm import tqdm
 # Modules/networks
 from networks.attention import AttentionModule, func_attention
@@ -23,13 +24,14 @@ from losses.gen_loss import GenLoss
 from losses.words_loss import WordsLoss
 from losses.sentence_loss import SentenceLoss
 # Dataloaders
-from data.birds import BirdsDataset
+from data.birds import BirdsDataset, BirdImage
 from data.preprocessor import DatasetPreprocessor
 # utilities
 from utilities.decorators import timer
 from utilities.training import Training
 # Trainers
 from trainers.trainer import ModelTrainer
+
 
 # Dimensions
 GF_DIM = 32
@@ -67,7 +69,33 @@ class DAMSMTrainer(ModelTrainer):
     def __init__(self):
         super().__init__()
         self.loss_history = []
-        self.modules = [RNN, CNN]
+        self._load_weights([RNN, CNN])
+        #self.modules = [RNN, CNN]
+    
+    @timer
+    def populate_attnmaps(self) -> None:
+        with torch.no_grad():
+            match_labels = self._make_match_labels(BATCH_SIZE).to(DEVICE)
+            for (b, batch) in tqdm(enumerate(DATALOADER)):
+                batch = [t.to(DEVICE) for t in batch]
+                (img_ids, captions, lengths, class_ids, img64, img128, img256) = batch
+                if min(lengths) < 2 or len(captions) < BATCH_SIZE:
+                    continue
+                # CNN encode image
+                class_ids = class_ids.detach().cpu().numpy()
+                (words_features, sent_code) = CNN(img256)
+                (nef, att_sze) = words_features.size(1), words_features.size(2)
+                # RNN
+                hiddencell = RNN.init_hidden_cell_states(BATCH_SIZE)
+                (word_embs, sent_embs) = RNN(captions, lengths, hiddencell)
+                # words Loss
+                (wloss, attnmaps) = WordsLoss(DEVICE).get_loss(words_features, word_embs, match_labels, lengths, class_ids)
+                # attn = List[1 x seq_len x 17 x 17]
+                ## Populate Attentionmaps
+                img_ids = img_ids.tolist()
+                for (imgid, attn) in zip(img_ids, attnmaps):
+                    birdImage = DATASET.id2image[imgid]
+                    birdImage.attnmap = attn.detach().cpu()
 
     @timer
     def pretrain_damsm(self, epochs=30, snapshot_weights_every=100, plot_loss_every=1):
@@ -76,7 +104,7 @@ class DAMSMTrainer(ModelTrainer):
             print('='*10 + f" Epoch {e+1} " + '='*10)
             for (b, batch) in tqdm(enumerate(DATALOADER)):
                 batch = [t.to(DEVICE) for t in batch]
-                (captions, lengths, class_ids, img64, img128, img256) = batch
+                (img_ids, captions, lengths, class_ids, img64, img128, img256) = batch
                 if min(lengths) < 2 or len(captions) < BATCH_SIZE:
                     continue
                 # CNN encode image
@@ -108,4 +136,19 @@ trainer = DAMSMTrainer()
 
 #%%
 ## 44 seconds for 1000 images
-trainer._plot_loss_history(trainer.loss_history, epoch=31)
+
+trainer.populate_attnmaps()
+
+#%%
+
+img = DATASET.images[25]
+img.view_image()
+
+#%%
+
+for (i, token) in enumerate(img.caption.replace(', ', ' , ').split()):
+    print(i, token)
+    
+#%%
+
+img.view_attention_map(1)
