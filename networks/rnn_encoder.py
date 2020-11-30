@@ -65,7 +65,7 @@ class RNNEncoder(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
-    def forward(self, captions: Tensor, caption_lengths: Tensor, hiddencell: Tuple[Tensor]) -> Tuple[Tensor, Tensor]:
+    def forward(self, captions: Tensor, caption_lengths: Tensor) -> Tuple[Tensor, Tensor]:
         """
         Forward propagation - turns captions into word-level and sentence-level embeddings
 
@@ -85,6 +85,7 @@ class RNNEncoder(nn.Module):
         # Pack padded sequence
         X = pack_padded_sequence(input=X, lengths=caption_lengths, batch_first=True, enforce_sorted=False)
         # Pass through RNN
+        hiddencell = self.init_hidden_cell_states(batch_size=len(caption_lengths))
         (output, (hidden, cell)) = self.rnn(X, hiddencell)
         # Extract word embeddings from OUTPUT
         output = pad_packed_sequence(sequence=output, batch_first=True)[0]  # -> (batch_size, seq_len, nhidden)
