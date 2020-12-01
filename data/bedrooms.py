@@ -22,6 +22,7 @@ from random import shuffle
 from utilities.decorators import timer
 from networks.cnn_embedder import ImageEmbedder
 from trainers.trainer import ModelTrainer
+from rapidfuzz.fuzz import ratio
 
 
 class SingleImage:
@@ -79,6 +80,11 @@ class Vocab:
         """Builds the vocabulary"""
         for image in dataset.images:
             self._addCaption(image.caption)
+        self.vocab_built = True
+        
+    def buildVocabFromMapping(self, mapping: dict):
+        for (path, (caption, class_id)) in mapping.items():
+            self._addCaption(caption)
         self.vocab_built = True
 
     def _addCaption(self, caption: List[str]):
@@ -296,3 +302,60 @@ class HierarchicalClusterer(ModelTrainer):
             factor = 2*factor
             k = (max_vocab_size // factor)
         return list(reversed(output))
+
+
+class CaptionHandler(Dataset):
+    def __init__(self, vocab_path=r'D:\GAN\bedroomProcessed\captionsAndClassIDs.json'):
+        self.vocab_path = vocab_path
+        self.vocab = Vocab()
+        self.img2caption = dict()
+        # Initialize vocab and img2caption
+        self._restore_state()
+
+    @property
+    def vocab_size(self) -> int:
+        return self.vocab.n_words
+
+    def _restore_state(self) -> None:
+        with open(self.vocab_path) as file:
+            mapping = json.load(file)
+        # Rebuild vocab
+        self.vocab.buildVocabFromMapping(mapping)
+        # Create img2caption mapping
+        for (path, (caption, class_id)) in mapping.items():
+            self.img2caption[path] = caption
+
+    def get_captions(self, imgnames: List[str]) -> List[List[str]]:
+        return [self._get_caption(name) for name in imgnames]
+    
+    def swap_captions(self, captions: List[List[str]], num=1, reverse=False) -> List[List[str]]:
+        """Swaps elements between two captions. Default is most global elements swapped first"""
+        assert len(captions) == 2
+        (c1, c2) = captions
+        (newc1, newc2) = c1[:], c2[:]
+        for i in range(1, num+1):
+            i = -i if reverse else (i-1)
+            newc1[i] = c2[i]
+            newc2[i] = c1[i]
+        return [newc1, newc2]
+
+    def preprocess(self, captions: List[List[str]]) -> Tuple[Tensor, Tensor]:
+        """Converts a list of captions to a tensor of indices and tensor of lengths"""
+        all_indices = [self.vocab.process(caption) for caption in captions] 
+        all_lengths = [len(tokens) for tokens in all_indices]
+        return (
+            torch.LongTensor(all_indices),  # Caption indices
+            torch.LongTensor(all_lengths),  # Caption lengths
+        )
+
+    def _get_caption(self, imgname: str) -> List[str]:
+        max_similarity = 0
+        match = None
+        for imgpath in self.img2caption.keys():
+            if imgname in imgpath:
+                similarity = ratio(imgname, imgpath)
+                if similarity > max_similarity:
+                    match = imgpath
+                    max_similarity = similarity
+        # Lookup best match
+        return self.img2caption[match]

@@ -49,10 +49,11 @@ WLAMBDA = 5.0
 SLAMBDA = 5.0
 
 # Datasets
-DATASET = Dataset(max_images=8000)
-DATASET.load_captions()
-DATALOADER = DATASET.make_dataloaders(batch_size=BATCH_SIZE, max_seqlen=8)
+DATASET = Dataset(rootdir=r'D:\GAN\buildingsDataset', max_images=99999)
+DATASET.load_captions_and_class_ids()
+#%%
 
+DATALOADER = DATASET.make_dataloaders(BATCH_SIZE)
 
 #%%
 # Networks/Modules
@@ -87,9 +88,10 @@ class GanTrainer(ModelTrainer):
         self._load_weights(modules=[CNN, RNN])
         RNN.freeze_all_weights()
         CNN.freeze_all_weights()
-        self.modules = [GENERATOR] + DISCRIMINATORS
+        self.modules = [GENERATOR, GEN_OPTIM] + DISCRIMINATORS + DISC_OPTIMS
         self.g_losses = []
         self.d_losses = []
+        self.damsm_losses = []
 
     def _make_mask(self, lengths: Tensor) -> Tensor:
         maxlen = max(lengths)
@@ -98,7 +100,7 @@ class GanTrainer(ModelTrainer):
         return torch.LongTensor(masks).cuda()
 
     @timer
-    def train_gan(self, epochs=100):
+    def train_gan(self, epochs=50):
         match_labels = self._make_match_labels(BATCH_SIZE)
         fixed_input = self._make_noise(batch_size=BATCH_SIZE, z_dim=Z_DIM)
         epbar = tqdm(total=epochs)
@@ -137,8 +139,10 @@ class GanTrainer(ModelTrainer):
                         (region_feat, global_feat) = CNN(fake_img)
                         (wloss, _) = WORDSLOSS.get_loss(region_feat, word_embs, match_labels, lengths, class_ids)
                         sloss = SENTLOSS.get_loss(global_feat, sent_embs, match_labels, class_ids)
-                        total_genloss += (wloss + sloss)
+                        damsm_loss = (wloss + sloss)
+                        total_genloss += damsm_loss
                         self.g_losses.append(loss.item())
+                        self.damsm_losses.append(damsm_loss.item())
                 #################### KL Loss ####################
                 kl_loss = KL_loss(mu=mu, logvar=logvar)
                 total_genloss += kl_loss
@@ -151,7 +155,9 @@ class GanTrainer(ModelTrainer):
                 (fake_imgs, _, _, _) = GENERATOR(noise=fixed_input, sent_emb=sent_embs, word_embs=word_embs, mask=masks)
                 fake_imgs = self._denormalise_multiple(fake_imgs)
                 self._plot_image_grid(fake_imgs, epoch=e)
+                self._plot_single_image(fake_imgs[-1], epoch=e)
                 self._save_weights(self.modules)
+                self._plot_history(self.damsm_losses, name='damsm_loss', epoch=e, window_size=50*e)
                 self._plot_history([self.g_losses, self.d_losses], name='loss_hist', epoch=e, window_size=50*e)
                 epbar.update()
 
@@ -162,6 +168,7 @@ trainer = GanTrainer()
 
 #%%
 
-trainer.train_gan(epochs=75)
+trainer.train_gan(epochs=150)
+
 
 #%%
